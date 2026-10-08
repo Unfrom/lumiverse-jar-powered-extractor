@@ -1,0 +1,26 @@
+{
+  "name": "lumiverse-jar-extractor",
+  "version": "1.0.0",
+  "description": "Lumiverse extension to scrape and extract character cards & lorebooks from JanitorAI using JAR",
+  "main": "dist/frontend.js",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "build:dev": "node build.js --dev"
+  },
+  "keywords": [
+    "lumiverse",
+    "spindle",
+    "extension",
+    "jar",
+    "janitorai",
+    "character-card",
+    "scraper"
+  ],
+  "author": "anupam-sys",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.4.0"
+  }
+}

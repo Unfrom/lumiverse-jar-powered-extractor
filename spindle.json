@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "name": "JAR Character Ripper",
+  "identifier": "jar_character_ripper",
+  "author": "anupam-sys",
+  "github": "https://github.com/anupam-sys/lumiverse-jar-extractor",
+  "homepage": "https://github.com/anupam-sys/lumiverse-jar-extractor",
+  "description": "Scrape and extract JanitorAI character cards & lorebooks using local JAR and import them directly into Lumiverse.",
+  "permissions": [
+    "characters",
+    "world_books",
+    "images",
+    "cors_proxy"
+  ],
+  "requested_capabilities": [
+    "base64_decode"
+  ],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js",
+  "minimum_lumiverse_version": "0.1.0"
+}
