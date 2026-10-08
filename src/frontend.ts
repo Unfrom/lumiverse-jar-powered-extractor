@@ -312,9 +312,13 @@ export function setup(ctx: SpindleFrontendContext) {
 
       <!-- Direct URL Section -->
       <div id="jar-sec-url" style="display: none; flex-direction: column; gap: 8px;">
+        <div style="font-size: 11px; color: var(--lumiverse-text-dim);">
+          Paste any JanitorAI character URL or UUID. Public cards can be scraped directly without JAR!
+        </div>
         <div class="jar-search-bar">
-          <input id="jar-url-scrape-input" class="jar-input" placeholder="Paste JanitorAI character URL or UUID..." />
-          <button id="jar-inspect-btn" class="jar-btn">Inspect</button>
+          <input id="jar-url-scrape-input" class="jar-input" placeholder="https://janitorai.com/characters/... or UUID" />
+          <button id="jar-direct-scrape-btn" class="jar-btn jar-btn-success">⚡ Direct Scrape</button>
+          <button id="jar-inspect-btn" class="jar-btn jar-btn-secondary">Inspect with JAR</button>
         </div>
       </div>
 
@@ -369,6 +373,7 @@ export function setup(ctx: SpindleFrontendContext) {
   const searchInput = container.querySelector('#jar-search-input') as HTMLInputElement;
   const searchBtn = container.querySelector('#jar-search-btn') as HTMLButtonElement;
   const urlInput = container.querySelector('#jar-url-scrape-input') as HTMLInputElement;
+  const directScrapeBtn = container.querySelector('#jar-direct-scrape-btn') as HTMLButtonElement;
   const inspectBtn = container.querySelector('#jar-inspect-btn') as HTMLButtonElement;
   const previewBox = container.querySelector('#jar-preview-area') as HTMLElement;
   const prevImg = container.querySelector('#jar-prev-img') as HTMLImageElement;
@@ -531,6 +536,18 @@ export function setup(ctx: SpindleFrontendContext) {
     if (val) inspectCharacter(val);
   });
 
+  directScrapeBtn?.addEventListener('click', () => {
+    const val = urlInput.value.trim();
+    if (!val) return;
+    log(`Starting direct scrape for ${val}...`);
+    directScrapeBtn.disabled = true;
+    directScrapeBtn.textContent = 'Scraping...';
+    ctx.sendToBackend({
+      type: 'direct_janitor_scrape',
+      url: val,
+    });
+  });
+
   // Display Preview
   function showPreview(rec: any) {
     activeCaptureRecord = rec;
@@ -646,12 +663,34 @@ export function setup(ctx: SpindleFrontendContext) {
     switch (payload.type) {
       case 'jar_status_result': {
         isConnected = !!payload.online;
-        dotEl.className = `jar-status-dot ${isConnected ? 'online' : ''}`;
         if (isConnected) {
+          dotEl.className = 'jar-status-dot online';
           statusTextEl.textContent = `JAR v${payload.version || '0.4.0'} Online ${payload.loggedIn ? '(Logged In)' : ''}`;
         } else {
-          statusTextEl.textContent = 'JAR Offline (Run npm start in JAR)';
+          fetch(`${getJarUrl()}/api/status`, { mode: 'cors' })
+            .then((r) => r.json())
+            .then((s) => {
+              if (s) {
+                isConnected = true;
+                dotEl.className = 'jar-status-dot online';
+                statusTextEl.textContent = 'JAR Online (Local PC Connected)';
+              }
+            })
+            .catch(() => {
+              dotEl.className = 'jar-status-dot';
+              statusTextEl.textContent = 'Standalone Mode (JAR Offline)';
+            });
         }
+        break;
+      }
+
+      case 'direct_janitor_scrape_result': {
+        if (directScrapeBtn) {
+          directScrapeBtn.disabled = false;
+          directScrapeBtn.textContent = '⚡ Direct Scrape';
+        }
+        log(`Direct scraped "${payload.data?.characterName || 'Character'}" (Public: ${payload.data?.cardPublic})`);
+        showPreview(payload.data);
         break;
       }
 

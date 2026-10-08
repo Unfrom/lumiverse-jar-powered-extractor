@@ -209,6 +209,81 @@ if (typeof spindle !== 'undefined' && spindle.onFrontendMessage) {
           break;
         }
 
+        case 'direct_janitor_scrape': {
+          const { url: charUrlOrId } = payload;
+          const match = String(charUrlOrId || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (!match) throw new Error('Could not find a valid JanitorAI character UUID in the provided URL');
+          const characterId = match[0];
+
+          const jUrl = `https://janitorai.com/hampter/characters/${characterId}`;
+          let rawChar: any;
+
+          if (typeof spindle !== 'undefined' && spindle.cors) {
+            const res = await spindle.cors(jUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'Referer': 'https://janitorai.com/',
+              },
+            });
+            if (res.status >= 400) throw new Error(`JanitorAI HTTP ${res.status}: ${res.statusText}`);
+            rawChar = JSON.parse(res.body);
+          } else {
+            const res = await fetch(jUrl, {
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'Referer': 'https://janitorai.com/',
+              },
+            });
+            if (!res.ok) throw new Error(`JanitorAI HTTP ${res.status}: ${res.statusText}`);
+            rawChar = await res.json();
+          }
+
+          const isPublic = !!rawChar.showdefinition;
+          const avatarName = rawChar.avatar || rawChar.profile_image || '';
+          const avatarUrl = avatarName.startsWith('http')
+            ? avatarName
+            : (avatarName ? `https://ella.janitorai.com/bot-avatars/${avatarName}?width=600` : '');
+
+          const tags = Array.isArray(rawChar.tags)
+            ? rawChar.tags.map((t: any) => (typeof t === 'string' ? t : t.name || t.slug)).filter(Boolean)
+            : [];
+
+          const charData = {
+            id: rawChar.id,
+            name: rawChar.name || 'Unnamed Character',
+            creator: rawChar.creator_name || 'JanitorAI Creator',
+            description: rawChar.description || '',
+            personality: rawChar.personality || '',
+            scenario: rawChar.scenario || '',
+            firstMessage: rawChar.first_message || '',
+            exampleMessages: rawChar.example_dialogs || rawChar.mes_example || '',
+            alternateGreetings: Array.isArray(rawChar.alternate_greetings) ? rawChar.alternate_greetings : [],
+            tags,
+            avatarUrl,
+            cardPublic: isPublic,
+            showdefinition: isPublic,
+            total_chat: rawChar.total_chat,
+            total_message: rawChar.total_message,
+          };
+
+          spindle.sendToFrontend({
+            type: 'direct_janitor_scrape_result',
+            success: true,
+            data: {
+              id: rawChar.id,
+              characterName: charData.name,
+              cardPublic: isPublic,
+              character: charData,
+              avatarUrl,
+              raw: rawChar,
+            },
+          }, userId);
+          break;
+        }
+
         case 'jar_get_capture': {
           const { id, baseUrl } = payload;
           if (!id) throw new Error('Capture ID is required');
@@ -272,7 +347,6 @@ if (typeof spindle !== 'undefined' && spindle.onFrontendMessage) {
                 });
                 if (img && img.id) {
                   uploadedImageId = img.id;
-                  // Associate image with character
                   try {
                     await spindle.characters.update(newChar.id, {
                       image_id: img.id,
@@ -282,6 +356,42 @@ if (typeof spindle !== 'undefined' && spindle.onFrontendMessage) {
               }
             } catch (err: any) {
               spindle.log.warn?.(`Avatar upload warning: ${err.message}`);
+            }
+          } else if (character.avatarUrl && typeof character.avatarUrl === 'string' && character.avatarUrl.startsWith('http')) {
+            try {
+              if (spindle.images?.upload) {
+                let imgBytes: Uint8Array | null = null;
+                if (typeof spindle.cors !== 'undefined') {
+                  const imgRes = await spindle.cors(character.avatarUrl, { responseType: 'arraybuffer' });
+                  if (imgRes.status === 200 && imgRes.body) {
+                    imgBytes = new Uint8Array(Buffer.from(imgRes.body, 'base64'));
+                  }
+                }
+                if (!imgBytes) {
+                  const imgRes = await fetch(character.avatarUrl);
+                  if (imgRes.ok) {
+                    imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+                  }
+                }
+                if (imgBytes) {
+                  const img = await spindle.images.upload({
+                    data: imgBytes,
+                    filename: `${character.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_avatar.png`,
+                    mime_type: 'image/png',
+                    owner_character_id: newChar.id,
+                  });
+                  if (img && img.id) {
+                    uploadedImageId = img.id;
+                    try {
+                      await spindle.characters.update(newChar.id, {
+                        image_id: img.id,
+                      });
+                    } catch (_) {}
+                  }
+                }
+              }
+            } catch (err: any) {
+              spindle.log.warn?.(`Avatar URL upload warning: ${err.message}`);
             }
           }
 
